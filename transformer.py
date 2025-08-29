@@ -153,6 +153,19 @@ class Encoder_Block(nn.Module):
         #run through feed forward then residual
         x = self.residual_connections[1](x, self.feed_forward_block)
         return x
+
+class Encoder(nn.Module):
+
+    #layers the encoder blocks
+    def __init__(self, layers: nn.ModuleList) -> None:
+        super().__init()
+        self.layers = layers
+        self.norm = Layer_Norm()
     
+    #for each layer mask and then att end apply norm to it
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
 
     
