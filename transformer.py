@@ -196,3 +196,33 @@ class Decoder(nn.Module):
             x = layer(x, encoder_output, src_mask, tgt_mask)
         return self.norm(x)
     
+class ProjectionLayer(nn.Module):
+    #decoder ouputs 512 dim vector, doesn't match with vocab size, this changes to vocab size
+    def __init__(self, d_model: int, vocab_size: int):
+        super().__init__()
+        self.proj = nn.Linear(d_model, vocab_size)
+    #return as a probability 
+    def forward(self, x):
+        return torch.log_softmax(self.proj(x), dim=-1)
+
+class Transformer(nn.Module):
+
+    def __init__(self, encoder: Encoder, decoder: Decoder,src_emb: Embedding, tgt_emb: Embedding, src_pos: Positional_Encoding,tgt_pos: Positional_Encoding, proj_layer: ProjectionLayer):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_emb = src_emb
+        self.tgt_emb = tgt_emb
+        self.src_pos = src_pos
+        self.tgt_pos = tgt_pos
+        self.proj_layer = proj_layer
+    
+    def encode(self, src, src_mask):
+        src = self.src_emb(src)
+        src = self.src_pos(src)
+        return self.encoder(src, src_mask)
+    
+    def decode(self, encoder_output, src_mask, tgt, tgt_mask):
+        tgt = self.tgt_emb(tgt)
+        tgt = self.tgt_pos(tgt)
+        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
