@@ -226,3 +226,8 @@ class Transformer(nn.Module):
         tgt = self.tgt_emb(tgt)
         tgt = self.tgt_pos(tgt)
         return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+
+    def proj(self, x):
+        return self.proj_layer(x)
+
+    
