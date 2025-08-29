@@ -75,3 +75,54 @@ class Feed_Forward(nn.Module):
         return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
         #turns linear -> RELU -> dropout -> linear
         #RELU is the non-linear
+    
+#multihead attention: looking at information from mult. perspectives
+class MultiHead_Attention(nn.Module):
+    #several heads(parallel attention layers) can learn diff kind of relationships at once
+    #Split into 3 Parts: Q(Query), K(Key), V(value)
+    #Query: "What other words are important to me"
+    #Key: "This is who I am"
+    #Attention Weights: Compares Q with each K to produce attention weights
+    #Attention weights decide how much of Value to mix into 'cats' new representation
+    #Multi-Head: various perspectives(like grammar or meaning)
+    def __init__(self, d_model: int, h: int, dropout: float) -> None:
+        super().__init__()
+        self.d_model = d_model# dimensions of embeddings
+        self.h = h #number of heads
+        #makes sure that each head gets even amount of dimensions
+        assert d_model % h == 0, "d_model ain't divisible by h"
+
+        self.d_k = d_model // h #dimensions per head
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+
+        self.w_o = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+    
+    @staticmethod
+    def attention(query, key, value, mask, dropout: nn.Dropout):
+        d_k = query.shape[-1]
+        attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k) # how much does word A care about word B
+        if mask is not None:
+            attention_scores.masked_fill_(mask == 0, -1e9) # don't pay attention to words that don't matter at all
+        attention_scores = attention_scores.softmax(dim = -1) #turning scores into probabilities
+
+    def forward(self, q, k, v, mask):
+        query = self.w_q(q)
+        key = self.w_k(k)
+        v = self.w_v(v)
+
+        #splitting into multiple heads 
+        query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)
+        key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
+        value = value.view(value.shape[0], value.shape[1], self.h, self.d_k).transpose(1, 2)
+
+        #updating embedding vectors based on the attention weights, x is the updated vector
+        x, self.attention_scores = MultiHead_Attention.attention(query, key, value, mask, self.dropout)
+
+        #putting heads back all together
+        x = x.transpose(1,2).continguous().view(x.shape[0], -1, self.h * self.d_k)
+        
+        #returning the output(x)
+        return self.w_o(x)
