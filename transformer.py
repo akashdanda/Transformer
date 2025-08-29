@@ -150,7 +150,7 @@ class Encoder_Block(nn.Module):
     def forward(self, x, src_mask):
         #run through multihead then residual
         x = self.residual_connections[0](x, lambda x: self.self_attention_block(x,x,x, src_mask))
-        #run throguh feed forward then residual
+        #run through feed forward then residual
         x = self.residual_connections[1](x, self.feed_forward_block)
         return x
     
