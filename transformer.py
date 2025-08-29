@@ -167,20 +167,21 @@ class Encoder(nn.Module):
             x = layer(x, mask)
         return self.norm(x)
 
+#Decoder: generates the output sequence
 class Decoder_Block(nn.Module):
 
     def __init__(self, self_attention_block: MultiHead_Attention, cross_attention_block:MultiHead_Attention, feed_forward_block:Feed_Forward, dropout: float) -> None:
         super().__init__()
-        self.self_attention_block = self_attention_block
-        self.cross_attention_block = cross_attention_block
-        self.feed_forward_block = feed_forward_block
+        self.self_attention_block = self_attention_block #looks at past target tokens
+        self.cross_attention_block = cross_attention_block #looks at output from encoder
+        self.feed_forward_block = feed_forward_block #adds non-linearity
 
         self.residual_connections = nn.Module([Residual_Connection(dropout) for _ in range(3)])
     
     def forward(self, x, encoder_output, src_mask, tgt_mask):
-        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
-        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
-        x = self.residual_connections[2](x, self.feed_forward_block)
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask)) #masked self_attention
+        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask)) #uses encoder output(cross attention)
+        x = self.residual_connections[2](x, self.feed_forward_block) #feed forward, processes independently
         return x
 
 class Decoder(nn.Module):
@@ -189,7 +190,7 @@ class Decoder(nn.Module):
         super().__init__()
         self.layers = layers
         self.norm = Layer_Norm()
-    
+    #layers each decoder block
     def forward(self, x, encoder_output, src_mask, tgt_mask):
         for layer in self.layers:
             x = layer(x, encoder_output, src_mask, tgt_mask)
