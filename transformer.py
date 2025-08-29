@@ -17,7 +17,7 @@ class Embedding(nn.Module):
 class Positional_Encoding(nn.Module):
 
     def __init__(self, d_model: int, seq_length: int, dropout: float) -> None:
-        super().__init__
+        super().__init__()
         self.d_model = d_model #dimensions of vector
         self.seq_length = seq_length #amount of tokens in sequence
         self.dropout = nn.Dropout(dropout) #dropping/deactivating specific neurons 
@@ -43,7 +43,7 @@ class Positional_Encoding(nn.Module):
     
     def forward(self, x):
         #adding positional embedding
-        x = x + (self.pe[:, :x.shape[1], :]).requires_grad(False)
+        x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
         return self.dropout(x)
     
 #layer normalization: for each of the embedding vectors -> adjust values so they have mean: 0 and variance: 1
@@ -51,11 +51,11 @@ class Positional_Encoding(nn.Module):
 #stabilize training and make optimization easier
 #Norm(x) = alpha * (x - mean)/(std + eps) + bias
 class Layer_Norm(nn.Module):
-    def __init__(self, eps: float = 10**-6) -> None:
-        super().__init()
+    def __init__(self, features, eps: float = 10**-6) -> None:
+        super().__init__()
         self.eps = eps #avoid division by zero
-        self.alpha = nn.Parameter(torch.ones(1))#alpha is a trainable scalable factor
-        self.bias = nn.Parameter(torch.zeros(1))#bias is a trainable offset
+        self.alpha = nn.Parameter(torch.ones(features))#alpha is a trainable scalable factor
+        self.bias = nn.Parameter(torch.zeros(features))#bias is a trainable offset
 
     def forward(self, x):
         mean = x.mean(dim = -1, keepdim=True)
@@ -108,10 +108,14 @@ class MultiHead_Attention(nn.Module):
             attention_scores.masked_fill_(mask == 0, -1e9) # don't pay attention to words that don't matter at all
         attention_scores = attention_scores.softmax(dim = -1) #turning scores into probabilities
 
+        if dropout is not None:
+            attention_scores = dropout(attention_scores)
+        
+        return (attention_scores @ value), attention_scores
     def forward(self, q, k, v, mask):
         query = self.w_q(q)
         key = self.w_k(k)
-        v = self.w_v(v)
+        value = self.w_v(v)
 
         #splitting into multiple heads 
         query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)
@@ -122,7 +126,7 @@ class MultiHead_Attention(nn.Module):
         x, self.attention_scores = MultiHead_Attention.attention(query, key, value, mask, self.dropout)
 
         #putting heads back all together
-        x = x.transpose(1,2).continguous().view(x.shape[0], -1, self.h * self.d_k)
+        x = x.transpose(1,2).contiguous().view(x.shape[0], -1, self.h * self.d_k)
         
         #returning the output(x)
         return self.w_o(x)
@@ -130,9 +134,10 @@ class MultiHead_Attention(nn.Module):
 
 #by passing through all these attention layers, can lose og data that's important -> preserving og data
 class Residual_Connection(nn.Module):
-    def __init__(self, dropout):
-        self.dropout = dropout
-        self.norm = Layer_Norm()
+    def __init__(self, features, dropout):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.norm = Layer_Norm(features)
 
     def forward(self, x, sublayer):
         return x + self.dropout(sublayer(self.norm(x)))
@@ -140,11 +145,11 @@ class Residual_Connection(nn.Module):
 class Encoder_Block(nn.Module):
     #order: input_embedding positional embeddimg, multhead self attention, residual connection & layer norm, feed forward, res connect and layer norm again
 
-    def __init__(self,self_attention_block: MultiHead_Attention, feed_forward_block: Feed_Forward, dropout: float) -> None:
+    def __init__(self,features:int, self_attention_block: MultiHead_Attention, feed_forward_block: Feed_Forward, dropout: float) -> None:
         super().__init__()
         self.self_attention_block = self_attention_block
         self.feed_forward_block = feed_forward_block
-        self.residual_connections = nn.ModuleList([Residual_Connection(dropout) for _ in range(2)])
+        self.residual_connections = nn.ModuleList([Residual_Connection(features, dropout) for _ in range(2)])
     
 
     def forward(self, x, src_mask):
@@ -156,10 +161,10 @@ class Encoder_Block(nn.Module):
 
 class Encoder(nn.Module):
     #layers the encoder blocks
-    def __init__(self, layers: nn.ModuleList) -> None:
-        super().__init()
+    def __init__(self, features, layers: nn.ModuleList) -> None:
+        super().__init__()
         self.layers = layers
-        self.norm = Layer_Norm()
+        self.norm = Layer_Norm(features)
     
     #for each layer mask and then att end apply norm to it
     def forward(self, x, mask):
@@ -170,13 +175,13 @@ class Encoder(nn.Module):
 #Decoder: generates the output sequence
 class Decoder_Block(nn.Module):
 
-    def __init__(self, self_attention_block: MultiHead_Attention, cross_attention_block:MultiHead_Attention, feed_forward_block:Feed_Forward, dropout: float) -> None:
+    def __init__(self, features: int, self_attention_block: MultiHead_Attention, cross_attention_block:MultiHead_Attention, feed_forward_block:Feed_Forward, dropout: float) -> None:
         super().__init__()
         self.self_attention_block = self_attention_block #looks at past target tokens
         self.cross_attention_block = cross_attention_block #looks at output from encoder
         self.feed_forward_block = feed_forward_block #adds non-linearity
 
-        self.residual_connections = nn.Module([Residual_Connection(dropout) for _ in range(3)])
+        self.residual_connections = nn.ModuleList([Residual_Connection(features, dropout) for _ in range(3)])
     
     def forward(self, x, encoder_output, src_mask, tgt_mask):
         x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask)) #masked self_attention
@@ -186,10 +191,10 @@ class Decoder_Block(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, layers: nn.ModuleList) -> None:
+    def __init__(self, features,layers: nn.ModuleList) -> None:
         super().__init__()
         self.layers = layers
-        self.norm = Layer_Norm()
+        self.norm = Layer_Norm(features)
     #layers each decoder block
     def forward(self, x, encoder_output, src_mask, tgt_mask):
         for layer in self.layers:
@@ -244,7 +249,7 @@ def build_transformer(src_vocab_size:int, tgt_vocab_size: int, src_seq_len: int,
     for _ in range(N):
         encoder_self_attention_block = MultiHead_Attention(d_model, h, dropout)
         feed_forward_block = Feed_Forward(d_model, d_ff, dropout)
-        encoder_block = Encoder_Block(encoder_self_attention_block, feed_forward_block, dropout)
+        encoder_block = Encoder_Block(d_model, encoder_self_attention_block, feed_forward_block, dropout)
         encoder_blocks.append(encoder_block)
     
     #Decoder Blocks
@@ -253,13 +258,13 @@ def build_transformer(src_vocab_size:int, tgt_vocab_size: int, src_seq_len: int,
         decoder_self_attention_block = MultiHead_Attention(d_model, h, dropout)
         decoder_cross_attention_block = MultiHead_Attention(d_model, h, dropout)
         feed_forward_block = Feed_Forward(d_model, d_ff, dropout)
-        decoder_block = Decoder_Block(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
+        decoder_block = Decoder_Block(d_model, decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
         decoder_blocks.append(decoder_block)
 
 
     #combining the blocks to form encoders & decoders
-    encoder = Encoder(nn.ModuleList(encoder_blocks))
-    decoder = Decoder(nn.ModuleList(decoder_blocks))
+    encoder = Encoder(d_model, nn.ModuleList(encoder_blocks))
+    decoder = Decoder(d_model, nn.ModuleList(decoder_blocks))
 
     projection_layer = ProjectionLayer(d_model, tgt_vocab_size)
     transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)
