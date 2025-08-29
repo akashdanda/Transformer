@@ -261,8 +261,12 @@ def build_transformer(src_vocab_size:int, tgt_vocab_size: int, src_seq_len: int,
     encoder = Encoder(nn.ModuleList(encoder_blocks))
     decoder = Decoder(nn.ModuleList(decoder_blocks))
 
+    projection_layer = ProjectionLayer(d_model, tgt_vocab_size)
+    transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)
 
+    #initializes parameters using xavier uniform initialization
+    for p in transformer.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
 
-
-
-    
+    return transformer
