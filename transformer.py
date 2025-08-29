@@ -126,3 +126,23 @@ class MultiHead_Attention(nn.Module):
         
         #returning the output(x)
         return self.w_o(x)
+
+
+#by passing through all these attention layers, can lose og data that's important -> preserving og data
+class Residual_Connection(nn.Module):
+    def __init__(self, dropout):
+        self.dropout = dropout
+        self.norm = Layer_Norm()
+
+    def forward(self, x, sublayer):
+        return x + self.dropout(sublayer(self.norm(x)))
+
+class Encoder_Block(nn.Module):
+    #order: input_embedding positional embeddimg, multhead self attention, residual connection & layer norm, feed forward, res connect and layer norm again
+
+    def __init__(self,self_attention_block: MultiHead_Attention, feed_forward_block: MultiHead_Attention, dropout: float) -> None:
+        super().__init__
+        self.self_attention_block = self_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connections = nn.ModuleList([Residual_Connection(dropout) for _ in range(2)])
+    
