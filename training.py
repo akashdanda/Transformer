@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
-
+from dataset import BillingualDataset, casual_mask
 from datasets import load_dataset
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
@@ -41,4 +41,23 @@ def get_ds(config):
     #Keep 90% for training and 10% for validation
     train_ds_size = int(0.9 * len(ds_raw))
     test_ds_dize = ds_raw - train_ds_size
-    train_ds_size, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_raw])
+    train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_raw])
+
+    train_ds = BillingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
+    val_ds = BillingualDataset(val_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
+
+    max_len_src = 0
+    max_len_tgt = 0
+
+    for item in ds_raw:
+        src_ids = tokenizer_src.encode(item['translation'][config['lang_src']]).ids
+        tgt_ids = tokenizer_tgt.encode(item['translation'][config['lang_tgt']]).ids
+        max_len_src = max(max_len_src, len(src_ids))
+        max_len_tgt = max(max_len_tgt, len(tgt_ids))
+    print(f'Max length of source sentence: {max_len_src}')
+    print(f'Max length of target sentence: {max_len_tgt}')
+
+    train_dataloader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
+    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True)
+
+    return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt
