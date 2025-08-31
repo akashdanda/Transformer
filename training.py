@@ -29,7 +29,7 @@ def get_or_build_tokenizer(config, ds, lang):
         tokenizer.pre_tokenizer = Whitespace() # preliminary splitting step
         trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], min_frequency = 2) #only words seen at least twice get added to training data
         #UNK, PAD, SOS, and EOS are special: padding, start of sentence, end of sentence, and unknown
-        tokenizer.train_from_iterator(get_all_sentences(ds, lang), training = trainer)#trains tokenizer by learning from vocab in dataset
+        tokenizer.train_from_iterator(get_all_sentences(ds, lang), trainer)#trains tokenizer by learning from vocab in dataset
         tokenizer.save(str(tokenizer_path))
     else:
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
@@ -37,7 +37,7 @@ def get_or_build_tokenizer(config, ds, lang):
 
 def get_ds(config):
     #loading dataset
-    ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config["lang-tgt"]}', split = 'train')
+    ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config["lang_tgt"]}', split = 'train')
 
     #build tokenizers
     tokenizer_src = get_or_build_tokenizer(config, ds_raw, config['lang_src'])
@@ -45,8 +45,8 @@ def get_ds(config):
 
     #Keep 90% for training and 10% for validation
     train_ds_size = int(0.9 * len(ds_raw))
-    test_ds_dize = ds_raw - train_ds_size
-    train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_raw])
+    test_ds_size = len(ds_raw) - train_ds_size
+    train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, test_ds_size])
 
     train_ds = BillingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
     val_ds = BillingualDataset(val_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
@@ -116,7 +116,7 @@ def train_model(config):
 
             label = batch['label'].to(device)
 
-            loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()))
+            loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
             batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
 
             writer.add_scalar('train loss', loss.item(), global_step)
@@ -137,7 +137,7 @@ def train_model(config):
             'global_step': global_step
         }, model_filename)
 
-if __name__ == 'main':
+if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     config = get_config()
     train_model(config)

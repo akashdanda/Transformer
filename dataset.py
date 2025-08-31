@@ -12,11 +12,12 @@ class BillingualDataset(Dataset):
         self.tokenizer_tgt = tokenizer_tgt
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
+        self.seq_len = seq_len
         
 
-        self.sos_token = torch.Tensor([tokenizer_src.token_to_id(['[SOS]'])], dtype = torch.int64)
-        self.eos_token = torch.Tensor([tokenizer_src.token_to_id(['[EOS]'])], dtype = torch.int64)
-        self.pad_token = torch.Tensor([tokenizer_src.token_to_id(['[PAD]'])], dtype = torch.int64)
+        self.sos_token = torch.tensor([tokenizer_src.token_to_id('[SOS]')], dtype = torch.int64)
+        self.eos_token = torch.tensor([tokenizer_src.token_to_id('[EOS]')], dtype = torch.int64)
+        self.pad_token = torch.tensor([tokenizer_src.token_to_id('[PAD]')], dtype = torch.int64)
     
     def __len__(self):
         return len(self.ds)
@@ -29,9 +30,11 @@ class BillingualDataset(Dataset):
         enc_input_tokens = self.tokenizer_src.encode(src_text).ids #will tokenize sentence
         dec_input_tokens = self.tokenizer_tgt.encode(tgt_text).ids #will tokenize target sentence
 
-        #number of padding needed for both to match seq_size
-        enc_num_padding_tokens = self.seq_len - len(enc_input_tokens) - 2
-        dec_num_padding_tokens = self.seq_len - len(dec_input_tokens) - 1
+        enc_input_tokens = enc_input_tokens[: self.seq_len - 2]
+        dec_input_tokens = dec_input_tokens[: self.seq_len - 1]
+
+        enc_num_padding_tokens = self.seq_len - (len(enc_input_tokens) + 2)  # +2 for SOS, EOS
+        dec_num_padding_tokens = self.seq_len - (len(dec_input_tokens) + 1)  # +1 for SOS or EOS
 
         #make sure that the length of seq not too long
         if enc_num_padding_tokens < 0 or dec_num_padding_tokens < 0:
