@@ -62,8 +62,22 @@ def get_ds(config):
     print(f'Max length of source sentence: {max_len_src}')
     print(f'Max length of target sentence: {max_len_tgt}')
 
-    train_dataloader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True)
+    train_dataloader = DataLoader(
+        train_ds,
+        batch_size=config['batch_size'],
+        shuffle=True,
+        num_workers=2,     # Colab T4 usually benefits from 2–4 workers
+        pin_memory=True
+    )
+
+    val_dataloader = DataLoader(
+        val_ds,
+        batch_size=1,
+        shuffle=True,
+        num_workers=2,
+        pin_memory=True
+    )
+
 
     return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt
 
