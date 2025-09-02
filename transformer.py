@@ -105,7 +105,7 @@ class MultiHead_Attention(nn.Module):
         d_k = query.shape[-1]
         attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k) # how much does word A care about word B
         if mask is not None:
-            attention_scores.masked_fill_(mask == 0, -1e9) # don't pay attention to words that don't matter at all
+            attention_scores.masked_fill_(mask == 0, -1e4) # don't pay attention to words that don't matter at all
         attention_scores = attention_scores.softmax(dim = -1) #turning scores into probabilities
 
         if dropout is not None:
